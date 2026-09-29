@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sync-api
+  template:
+    metadata:
+      labels:
+        app: sync-api
+    spec:
+      containers:
+        - name: sync-api
+          image: sync-api:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GOTENBERG_URL
+              value: "http://gotenberg:3000/forms/chromium/convert/html"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sync-api
+spec:
+  type: NodePort
+  selector:
+    app: sync-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; color: #222; padding: 40px; }
+  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1f4e79; padding-bottom: 16px; }
+  .company { font-size: 22px; font-weight: bold; color: #1f4e79; }
+  .company small { display: block; font-size: 12px; font-weight: normal; color: #666; margin-top: 4px; }
+  .quote-meta { text-align: right; font-size: 13px; color: #555; line-height: 1.6; }
+  h2 { margin-top: 30px; color: #1f4e79; font-size: 17px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  td, th { padding: 8px 10px; border-bottom: 1px solid #ddd; font-size: 14px; text-align: left; }
+  td.amount, th.amount { text-align: right; }
+  .subtotal td { font-weight: bold; border-top: 1px solid #999; }
+  .total-row td { font-weight: bold; border-top: 2px solid #1f4e79; font-size: 16px; }
+  .installment { margin-top: 12px; font-size: 13px; color: #444; text-align: right; }
+  .footer { margin-top: 40px; font-size: 11px; color: #888; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="company">
+      Northline Insurance
+      <small>1000 Rue Example, Montréal, QC H3B 0A0</small>
+    </div>
+    <div class="quote-meta">
+      Quotation #: QT-2026-004821<br>
+      Issued: 2026-09-28<br>
+      Valid until: 2026-10-28
+    </div>
+  </div>
+
+  <h2>Auto Insurance Quotation</h2>
+  <table>
+    <tr><th>Policyholder</th><td>Amelia Tremblay</td></tr>
+    <tr><th>Address</th><td>250 Rue Sample, Montréal, QC H2X 1Y4</td></tr>
+    <tr><th>Vehicle</th><td>2023 Honda Civic Sedan</td></tr>
+    <tr><th>Coverage</th><td>Comprehensive + Collision</td></tr>
+    <tr><th>Deductible</th><td>$500.00 CAD</td></tr>
+    <tr><th>Policy term</th><td>12 months</td></tr>
+  </table>
+
+  <h2>Premium Breakdown</h2>
+  <table>
+    <tr><th>Item</th><th class="amount">Amount (CAD)</th></tr>
+    <tr><td>Base premium (liability)</td><td class="amount">$1,180.00</td></tr>
+    <tr><td>Collision coverage</td><td class="amount">$420.00</td></tr>
+    <tr><td>Comprehensive coverage</td><td class="amount">$260.00</td></tr>
+    <tr><td>Roadside assistance</td><td class="amount">$65.00</td></tr>
+    <tr><td>Multi-policy discount</td><td class="amount">-$145.00</td></tr>
+    <tr class="subtotal"><td>Subtotal</td><td class="amount">$1,780.00</td></tr>
+    <tr><td>Provincial premium tax (9%)</td><td class="amount">$160.20</td></tr>
+    <tr class="total-row"><td>Total annual premium</td><td class="amount">$1,940.20 CAD</td></tr>
+  </table>
+  <div class="installment">Or 12 monthly payments of $161.68 CAD</div>
+</body>
+</html>
