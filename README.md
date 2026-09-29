@@ -1,0 +1,55 @@
+# Surgetank
+
+Queue-based load leveling for PDF generation — fixing a timeout/resource issue by moving heavy rendering work off the request path.
+
+This reproduces an issue I hit at a previous job: PDF/quotation generation via [Gotenberg](https://gotenberg.dev/), called synchronously, failing under concurrent load. The original fix there was scaling up CPU/memory/replicas — which raises the failure ceiling but doesn't remove it. This project rebuilds the problem and fixes it properly.
+
+## Architecture
+
+**Before** — synchronous, direct call:
+Agent → sync-api → Gotenberg (blocks until render finishes)
+
+**After** — async, queue-based, autoscaled:
+Agent → async-api → Redis queue (returns instantly)
+↓
+worker (KEDA-autoscaled) → Gotenberg
+Agent polls /status/:id, downloads /result/:id once done
+
+Redis stands in locally for AWS SQS + S3 — a deliberate simplification for local development on `kind`, not a production design choice.
+## Results
+Same load profile (ramp to 15 concurrent VUs), both stacks:
+**Before:** 54.54% of requests failed. Failures were client-side timeouts (`http_req_duration` avg 25.3s, p95 30s) — requests queuing up behind each other on a single synchronous Gotenberg call, not crashes.
+**After:** 100% success — `submit accepted`, `job completed`, `result is a pdf` all pass.
+## The debugging journey
+Getting a result took a few real fixes along the way:
+1. **Scaling workers alone recreated the same bottleneck, one level down.** 3 `worker` pods hitting a single Gotenberg replica caused CPU contention — each render took ~4x longer under shared 500m CPU. Fix: scale Gotenberg's replica count too, not just the consumer.
+3. **KEDA's scaling reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed outright — a real, known characteristic of reactive autoscaling.
+4. **Fix: pre-warm baseline capacity.** Raising `minReplicaCount` from 1 to 3 meant `worker` started close to where it needed to be instead of scaling from scratch. Re-running the *exact same input load-test* that previously failed at 34% completion now passes 100%, with the HPA holding steady at 3 replicas throughout — no scramble needed.
+This is the same fix pattern as pre-warming/overprovisioning to handle cold starts in other autoscaling systems (e.g. Karpenter's node provisioning) — trading a small amount of idle capacity cost for much faster response to real bursts.
+## Tech stack
+- **Go** — `sync-api`, `async-api`, `worker`
+- **Gotenberg** — PDF rendering (headless Chromium)
+- **Redis** — job queue + result storage (local stand-in for SQS/S3)
+- **Kubernetes** (`kind` locally) — Deployments, Services, resource limits
+- **KEDA** — autoscaling `worker` on Redis queue depth
+- **k6** (TypeScript) — load testing, before/after comparison
+## Running it locally
+```bash
+kind create cluster --config kind/cluster-config.yaml
+# Before stack
+docker build -t sync-api:v1 docker/sync-api
+kind load docker-image sync-api:v1 --name surgetank
+kubectl apply -f k8s/before/
+# After stack
+docker build -t async-api:v1 docker/async-api
+docker build -t worker:v1 docker/worker
+kind load docker-image async-api:v1 --name surgetank
+kind load docker-image worker:v1 --name surgetank
+kubectl apply -f k8s/after/
+# KEDA
+helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda --namespace keda --create-namespace
+kubectl apply -f k8s/after/worker-scaledobject.yaml
+# Load tests
+k6 run load-test/before.ts
+k6 run load-test/after.ts
