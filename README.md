@@ -40,8 +40,9 @@ Same load profile (ramp to 15 concurrent VUs) for both stacks:
 
 Getting a result took a few real fixes along the way:
 
-1. **Scaling workers alone recreated the same bottleneck, one level down.** 3 `worker` pods hitting a single Gotenberg replica caused CPU contention — each render took ~4x longer under shared 500m CPU. Fix: scale Gotenberg's replica count too, not just the consumer.
-2. **KEDA's scaling reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed outright — a real, known characteristic of reactive autoscaling.
+1. **Scaling workers alone recreated the same bottleneck.** 3 `worker` pods hitting a single Gotenberg replica caused CPU contention.
+Fix: scale Gotenberg's replica count too, not just the consumer.
+2. **KEDA's scaling slow reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed outright, a characteristic of reactive autoscaling.
 3. **Fix: pre-warm baseline capacity.** Keeping 3 workers running at all times, so there's no wait for new pods to spin up. Running the exact same test again, the one that used to fail 34% of the time - now passes 100%.
 
 Same idea as keeping spare servers warm to avoid cold starts elsewhere (like Karpenter provisioning nodes) — you pay a bit extra for idle capacity, but respond to bursts instantly instead of delaying.
