@@ -2,7 +2,7 @@
 
 Queue-based load leveling for PDF generation — fixing a timeout/resource issue by moving heavy rendering work off the request path.
 
-This reproduces an issue I hit at a previous job: PDF/quotation generation via [Gotenberg](https://gotenberg.dev/), called synchronously, failing under concurrent load. The original fix there was scaling up CPU/memory/replicas — which raises the failure ceiling but doesn't remove it. This project rebuilds the problem and fixes it properly.
+This reproduces an issue I hit at a previous job: PDF/quotation generation via [Gotenberg](https://gotenberg.dev/), called synchronously, failing under concurrent load. The original fix there was scaling up CPU/memory — which raises the failure ceiling but doesn't remove it. This project rebuilds the problem and fixes it properly.
 
 ## Architecture
 
@@ -16,16 +16,17 @@ Agent → sync-api → Gotenberg (blocks until render finishes)
 Agent → async-api → Redis queue (returns instantly)
                           ↓
                   worker (KEDA-autoscaled) → Gotenberg
+
 Agent polls /status/:id, downloads /result/:id once done
 ```
 
-Redis stands in locally for AWS SQS + S3 — a deliberate simplification for local development on `kind`, not a production design choice.
+Redis stands in locally for AWS SQS + S3 — a simplification for local development on `kind`.
 
 ## Results
 
-Same load profile (ramp to 15 concurrent VUs), both stacks:
+Same load profile (ramp to 15 concurrent VUs) for both stacks:
 
-**Before:** 54.54% of requests failed. Failures were client-side timeouts (`http_req_duration` avg 25.3s, p95 30s) — requests queuing up behind each other on a single synchronous Gotenberg call, not crashes.
+**Before:** 54.54% of requests failed. Failures were client-side timeouts. Requests are queuing up behind each other on a single synchronous Gotenberg call.
 
 ![Before: 54.54% failure, client-side timeouts](docs/before-result.png)
 ![Before: sync-api logs showing context deadline exceeded](docs/before-gotenberg-timeout.png)
@@ -37,13 +38,13 @@ Same load profile (ramp to 15 concurrent VUs), both stacks:
 
 ## The debugging journey
 
-Getting a trustworthy result took a few real fixes along the way:
+Getting a result took a few real fixes along the way:
 
 1. **Scaling workers alone recreated the same bottleneck, one level down.** 3 `worker` pods hitting a single Gotenberg replica caused CPU contention — each render took ~4x longer under shared 500m CPU. Fix: scale Gotenberg's replica count too, not just the consumer.
 2. **KEDA's scaling reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed outright — a real, known characteristic of reactive autoscaling.
-3. **Fix: pre-warm baseline capacity.** Raising `minReplicaCount` from 1 to 3 meant `worker` started close to where it needed to be instead of scaling from scratch. Re-running the exact same load test that previously failed at 34% completion now passes 100%, with the HPA holding steady at 3 replicas throughout — no scramble needed.
+3. **Fix: pre-warm baseline capacity.** Keeping 3 workers running at all times, so there's no wait for new pods to spin up. Running the exact same test again, the one that used to fail 34% of the time - now passes 100%.
 
-This is the same fix pattern as pre-warming/overprovisioning to handle cold starts in other autoscaling systems (e.g. Karpenter's node provisioning) — trading a small amount of idle capacity cost for much faster response to real bursts.
+Same idea as keeping spare servers warm to avoid cold starts elsewhere (like Karpenter provisioning nodes) — you pay a bit extra for idle capacity, but respond to bursts instantly instead of delaying.
 
 ## Tech stack
 
@@ -80,11 +81,3 @@ kubectl apply -f k8s/after/worker-scaledobject.yaml
 k6 run load-test/before.ts
 k6 run load-test/after.ts
 ```
-
-## What's next
-
-- Helm charts for both stacks
-- Argo CD for GitOps deployment
-- Terraform + real AWS (EKS, SQS, S3, IAM) — currently only tested on local `kind`
-- Prometheus/Grafana monitoring
-- CI/CD via GitHub Actions
