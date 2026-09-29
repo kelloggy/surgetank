@@ -42,7 +42,7 @@ Getting a result took a few real fixes along the way:
 
 1. **Scaling workers alone recreated the same bottleneck.** 3 `worker` pods hitting a single Gotenberg replica caused CPU contention.
 Fix: scale Gotenberg's replica count too, not just the consumer.
-2. **KEDA's scaling slow reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed. Its a characte
+2. **KEDA's scaling slow reaction time (~70-90s) caused incomplete jobs during short bursts,** even though nothing failed. It's a characteristic of reactive autoscaling.
 3. **Fix: pre-warm baseline capacity.** Keeping 3 workers running at all times, so there's no wait for new pods to spin up. Running the exact same test again, the one that used to fail 34% of the time - now passes 100%.
 
 Same idea as keeping spare servers warm to avoid cold starts (like Karpenter provisioning nodes) — we pay a bit extra for idle capacity, but respond to bursts instantly instead of delaying.
