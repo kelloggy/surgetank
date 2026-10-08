@@ -1,0 +1,65 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [sync-api, async-api, worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Vet and build
+        working-directory: ${{ matrix.service }}
+        run: |
+          go vet ./...
+          go build ./...
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        run: docker build -t ${{ matrix.service }}:${{ github.sha }} ${{ matrix.service }}
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:${{ github.sha }}
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+  push-image:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [sync-api, async-api, worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }} ${{ matrix.service }}
+          docker push ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    needs: push-image
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'echo "TODO: kubectl apply / helm upgrade once EKS exists from the Terraform phase"'
